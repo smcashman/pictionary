@@ -1,17 +1,18 @@
-
+// intialize global variables
 var socket = io();
 var drawTool;
 var guessBox;
 var randomWordIndex;
 var randomword;
 
+// define functions that handle drawing game
 var pictionary = function() {
     var canvas, context;
 
     var draw = function(position) {
         context.beginPath();
         context.arc(position.x, position.y,
-                         6, 0, 2 * Math.PI);
+            6, 0, 2 * Math.PI);
         context.fill();
     };
 
@@ -20,104 +21,121 @@ var pictionary = function() {
     canvas[0].width = canvas[0].offsetWidth;
     canvas[0].height = canvas[0].offsetHeight;
 
-     
-    canvas.on('mousedown', function(event){
-            drawTool = true;
-            console.log(drawTool)
-        })
+    socket.on("key", function(key) {
+        console.log(key);
+        // Checking if drawer is online based on the key
+        socket.on("check", function() {
+            socket.emit("drawerOnline", key);
+        });
 
-    canvas.on('mouseup', function(event){
-        drawTool = false;
-        console.log(drawTool)
-         })
+        if (key === true) {
+            var drawing = false;
 
- canvas.on('mousemove', function(event) {
-        if (drawTool){
-        var offset = canvas.offset();
-        var position = {x: event.pageX - offset.left,
-                        y: event.pageY - offset.top};
-        draw(position);
-        socket.emit('drawing', position);
+            socket.emit("randomWord");
+            $("#guess").remove();
+
+
+            // Function that activates mousedown actions
+            function mouseDown(bool) {
+                canvas.on('mousedown', function(event) {
+                    drawing = bool;
+                });
+            }
+
+            socket.on("randomWord", function(word) {
+                $("#userRole").html("Word to draw: " + word);
+            });
+
+          
+            canvas.on('mousemove', function(event) {
+            if (drawing == true) {
+                var offset = canvas.offset();
+                var position = {
+                    x: event.pageX - offset.left,
+                    y: event.pageY - offset.top
+                };
+                draw(position);
+                socket.emit('drawing', position);
+                
+            }
+        });
+
+            // Keeping track of online users for the drawer
+            socket.on("counter", function(counter) {
+                if (counter === 1) {
+                    $("#drawOrNot").html("<p style='color: crimson'>You cannot draw. No guesser online yet.</p>");
+                    // Deactivates mouse action
+                    mouseDown(false);
+                } else {
+                    $("#drawOrNot").html("<p style='color: green'>Guesser popped up. Now you can draw!</p>");
+                    // Activates mouse action
+                    mouseDown(true);
+
+                    canvas.on('mouseup', function(event) {
+                        drawing = false;
+                    });
+                }
+            });
+        }
+         socket.on('drawing', draw);
+    socket.on('drawerWentOff', function() {
+        $("#drawOrNot").html("<p style='color: crimson'>Drawer went offline, stop guessing.</p>");
+        guessOrNot = false;
+    });
+    });
+
+   
+
+
+
+    var onKeyDown = function(event) {
+        if (event.keyCode != 13) { // Enter
+            return;
+        }
+
+        
+        guess = guessBox.val();
+        $('#previousGuess').append('<p>' + guess + '</p>');
+        console.log(guess);
+        console.log(randomword)
+        if (guess === randomword) {
+            $('#previousGuess').append('<p> Correct! </p>');
+        } else {
+            console.log('nope')
+        }
+
+        guessBox.val('');
+        socket.emit('userGuess', guess);
     };
-         });
 
- socket.on('drawing', draw);
+    var onGuess = function(guess) {
+        $('#previousGuess').text(guess);
 
-
-var drawingUser = function(message){
-    $('#guess').hide();
-    var words = [
-    "dinosaur", "monkey", "banana", "person", "pen", "class", "people",
-    "volcano", "water", "side", "place", "man", "explosion", "woman", "octopus", "witch",
-    "vampire", "queen", "sunglasses", "plane", "train", "car", "castle", "line", "wind",
-    "land", "home", "hand", "balloon", "picture", "animal", "mother", "father",
-    "brother", "sister", "world", "head", "snake", "country", "penguin",
-    "whale", "school", "plant", "food", "sun", "flower", "eye", "city", "tree",
-    "farm", "book", "sea", "night", "day", "life", "north", "south", "east",
-    "west", "child", "shark", "butterfly", "paper", "music", "river", "skyscraper",
-    "foot", "giant", "stars", "science", "room", "friend", "idea", "fish",
-    "mountain", "horse", "watch", "color", "face", "wood", "tornado", "bird",
-    "body", "dog", "family", "scarf", "door", "poison", "winter", "ship", "fall",
-    "rock", "spring", "fire", "problem", "piece", "top", "bottom", "king",
-    "space"
-];
-
- randomWordIndex = Math.floor(Math.random()*(100-1)+1);
- randomword = words[randomWordIndex];
-
-$('#userRole').html('<p>'+randomword+'</p>');
-};
-
-
- var onKeyDown = function(event) {
-    if (event.keyCode != 13) { // Enter
-        return;
     }
 
-    console.log(guessBox.val());
-    guess=guessBox.val();
-    $('#previousGuess').append('<p>'+guess+'</p>');
-    if (guess == randomword){
-        $('#previousGuess').append('<p> Correct! </p>');
-    }
-    else {
-        console.log('nope')
+    var guessingUser = function(secondmessage) {
+
     }
 
-    guessBox.val('');
-    socket.emit('userGuess', guess);
-};
+    var lostUser = function(disconnect) {
+        $('#previousGuess').html('<p> a user has left!</p>');
+    }
 
-var onGuess = function(guess){
-    $('#previousGuess').text(guess);
+    socket.on('userGuess', onGuess);
+    guessBox = $('#guess input');
+    guessBox.on('keydown', onKeyDown);
+    //socket.on('message', drawingUser);
+    socket.on('secondmessage', guessingUser);
+    socket.on('disconnect', lostUser);
+
     
-}
-
-var guessingUser = function(secondmessage){
-
-}
-
-var lostUser = function(disconnect){
-    $('#previousGuess').append('<p> a user has left!</p>');
-}
-
-socket.on('userGuess', onGuess);
-guessBox = $('#guess input');
-guessBox.on('keydown', onKeyDown);
-socket.on('message', drawingUser);
-socket.on('secondmessage', guessingUser);
-socket.on('disconnect', lostUser);
-
-// var addGuess = function(guessBox){
-//     $('#previousGuess').append('<p>'+guessBox+'</p>');
-// }
 };
 
 
 
 
 $(document).ready(function() {
-pictionary();
+    pictionary();
 
 
 

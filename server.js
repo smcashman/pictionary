@@ -1,3 +1,4 @@
+// declare global variables, require packages
 var http = require('http');
 var express = require('express');
 var socket_io = require('socket.io');
@@ -8,33 +9,108 @@ app.use(express.static('public'));
 var server = http.Server(app);
 var io = socket_io(server);
 
-var clientsConnected = 0
+var canvasOn = true;
+var arr = [];
+var user;
 
-io.on('connection', function (socket) {
-	//io.emit('message', 'A new user has joined!');
-	clientsConnected ++
-	console.log(clientsConnected+' before if')
-	if (clientsConnected < 2){
-		console.log(clientsConnected)
-		io.emit('message', 'You are drawing!'); 	
-	}
-	else {
-		io.emit('secondMessage', 'You are guessing!');
-	}
+//initialize counter variables
+var usersCurrentlyConnected = 0;
+var totalClientsConnected  = 0;
+var isDrawerOnline = false;
 
-	socket.on('drawing', function(position){
-// 		if (clientsConnected < 2){
- 	socket.broadcast.emit('drawing', position);
-// };
-	})
+//create array of words that can be drawn
+var words = [
+    "dinosaur", "monkey", "banana", "person", "pen", "class", "people",
+    "volcano", "water", "side", "place", "man", "explosion", "woman", "octopus", "witch",
+    "vampire", "queen", "sunglasses", "plane", "train", "car", "castle", "line", "wind",
+    "land", "home", "hand", "balloon", "picture", "animal", "mother", "father",
+    "brother", "sister", "world", "head", "snake", "country", "penguin",
+    "whale", "school", "plant", "food", "sun", "flower", "eye", "city", "tree",
+    "farm", "book", "sea", "night", "day", "life", "north", "south", "east",
+    "west", "child", "shark", "butterfly", "paper", "music", "river", "skyscraper",
+    "foot", "giant", "stars", "science", "room", "friend", "idea", "fish",
+    "mountain", "horse", "watch", "color", "face", "wood", "tornado", "bird",
+    "body", "dog", "family", "scarf", "door", "poison", "winter", "ship", "fall",
+    "rock", "spring", "fire", "problem", "piece", "top", "bottom", "king",
+    "space"
+];
 
-socket.on('userGuess', function(guess){
-	socket.broadcast.emit('userGuess', guess);
-});
+//pick a random word to show drawing user
 
-socket.on('disconnect', function() {
-        io.emit('disconnect', 'A user has left');
-    });
-});
 
-server.listen(process.env.PORT || 8080);
+
+io.on('connection', function(socket) {
+
+            usersCurrentlyConnected += 1;
+            totalClientsConnected += 1;
+
+            //emitting 
+            socket.emit("username", totalClientsConnected);
+
+
+            // Emiting canvas key
+            io.emit("key", canvasOn);
+            // Emitting counter value
+            io.emit("counter", usersCurrentlyConnected);
+       
+           
+            canvasOn = false;
+
+            socket.on("randomWord", function() {
+    		randomWordIndex = Math.floor(Math.random() * (100 - 1) + 1);
+    		var drawingWord =  words[randomWordIndex];
+    		socket.emit("randomWord", drawingWord)
+			
+			});
+            // emitting the canvas to all users
+            socket.on('drawing', function(position) {
+
+                socket.broadcast.emit('drawing', position);
+
+            })
+
+            //emitting user guess to all users
+            socket.on('userGuess', function(guess) {
+                socket.broadcast.emit('userGuess', guess);
+            });
+
+            //handling a user disconnecting
+            socket.on("disconnect", function() {
+                isDrawerOnline = false;
+
+                arr = [];
+
+                io.emit("check");
+
+                usersCurrentlyConnected -= 1;
+
+                io.emit("counter", usersCurrentlyConnected);
+                if (usersCurrentlyConnected === 0) {
+                    canvasOn = true;
+                }
+            });
+
+            // Checking if the drawer is online or not, after every received disconnection
+            socket.on("drawerOnline", function(key) {
+                        arr.push(key);
+
+                        // When the array length matches the counter, execute the following code
+                        if (arr.length === usersCurrentlyConnected) {
+                            console.log(arr);
+
+                            // We detect if the drawer is still online or not
+                            for (var i = 0; i < arr.length; i++) {
+                                if (arr[i] === true) {
+                                    isDrawerOnline = true;
+                                }
+                            };
+
+                            // If he isn't, we emit the following event
+                            if (isDrawerOnline === false) {
+                                io.emit("drawerWentOff");
+                            };
+                        };
+                        });
+        });
+
+                    server.listen(process.env.PORT || 8080);
