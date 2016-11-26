@@ -4,6 +4,7 @@ var drawTool;
 var guessBox;
 var randomWordIndex;
 var randomword;
+var guess;
 
 // define functions that handle drawing game
 var pictionary = function() {
@@ -22,113 +23,138 @@ var pictionary = function() {
     canvas[0].height = canvas[0].offsetHeight;
 
     socket.on("key", function(key) {
-        console.log(key);
-        // Checking if drawer is online based on the key
-        socket.on("check", function() {
-            socket.emit("drawerOnline", key);
-        });
-
-        if (key === true) {
-            var drawing = false;
-
-            socket.emit("randomWord");
-            $("#guess").remove();
-
-
-            // Function that activates mousedown actions
-            function mouseDown(bool) {
-                canvas.on('mousedown', function(event) {
-                    drawing = bool;
-                });
-            }
-
-            socket.on("randomWord", function(word) {
-                $("#userRole").html("Word to draw: " + word);
+            console.log(key);
+            // Checking if drawer is online based on the key
+            socket.on("check", function() {
+                socket.emit("drawerOnline", key);
             });
 
-          
-            canvas.on('mousemove', function(event) {
-            if (drawing == true) {
-                var offset = canvas.offset();
-                var position = {
-                    x: event.pageX - offset.left,
-                    y: event.pageY - offset.top
-                };
-                draw(position);
-                socket.emit('drawing', position);
-                
-            }
-        });
+            if (key === true) {
+                var drawing = false;
 
-            // Keeping track of online users for the drawer
-            socket.on("counter", function(counter) {
-                if (counter === 1) {
-                    $("#drawOrNot").html("<p style='color: crimson'>You cannot draw. No guesser online yet.</p>");
-                    // Deactivates mouse action
-                    mouseDown(false);
-                } else {
-                    $("#drawOrNot").html("<p style='color: green'>Guesser popped up. Now you can draw!</p>");
-                    // Activates mouse action
-                    mouseDown(true);
+                socket.emit("randomWord");
+                $("#guess").remove();
 
-                    canvas.on('mouseup', function(event) {
-                        drawing = false;
+
+                // Function that activates mousedown actions
+                function mouseDown(bool) {
+                    canvas.on('mousedown', function(event) {
+                        drawing = bool;
                     });
                 }
-            });
-        }
-         socket.on('drawing', draw);
-    socket.on('drawerWentOff', function() {
-        $("#drawOrNot").html("<p style='color: crimson'>Drawer went offline, stop guessing.</p>");
-        guessOrNot = false;
+
+                socket.on("randomWord", function(word) {
+                    $("#userRole").html("Word to draw: " + word);
+                });
+
+
+                canvas.on('mousemove', function(event) {
+                    if (drawing == true) {
+                        var offset = canvas.offset();
+                        var position = {
+                            x: event.pageX - offset.left,
+                            y: event.pageY - offset.top
+                        };
+                        draw(position);
+                        socket.emit('drawing', position);
+
+                    }
+                });
+
+                // Keeping track of online users for the drawer
+                socket.on("counter", function(counter) {
+                    if (counter === 1) {
+                        $("#drawOrNot").html("<p style='color: crimson'> Waiting for guesser to connect...</p>");
+                        // Deactivates mouse action
+                        mouseDown(false);
+                    } else {
+                        $("#drawOrNot").html("<p style='color: green'> New guesser online! Ready, set, draw!</p>");
+                        // Activates mouse action
+                        mouseDown(true);
+
+                        canvas.on('mouseup', function(event) {
+                            drawing = false;
+                        });
+                    }
+                });
+            } else {
+
+
+                var guessOrNot = true;
+
+                socket.on("checkGuess", function(user) {
+                    if (username === user) {
+                        $("#right").html("<p style='color: green'>Your guess was correct! <br> You are now the drawer.</p>");
+                        socket.emit("guesserToDrawer");
+                    }
+                });
+
+                var onKeyDown = function(event) {
+                    if (guessOrNot === true) {
+                        guess = guessBox.val();
+
+                        if (event.keyCode != 13) { // Enter
+                            return;
+                        }
+                        if (guess !== "") {
+                            socket.emit("guess", guess, username);
+                        }
+                        guessBox.val('');
+                    }
+                };
+
+                guessBox.on('keydown', onKeyDown);
+
+
+                socket.on('drawing', draw);
+                socket.on('drawerWentOff', function() {
+                    $("#drawOrNot").html("<p style='color: crimson'>Drawer is offline, stop guessing!</p>");
+                    guessOrNot = false;
+                });
+            };
+
+        socket.on("correct", function(user) {
+            socket.emit("switch", user);
+        });
+
+
+       // $('#previousGuess').append('<p>' + guess + '</p>');
+
+
+        guessBox.val(''); socket.emit('userGuess', guess);
     });
+
+    socket.on("guess", function(guessText, username) {
+        var button = $("<button/>", {
+            text: username + ": " + guessText,
+            id: username,
+            class: 'btn btn-warning animated bounceIn',
+            click: function() {
+                // Emitting the correct guess
+                socket.emit("correctGuess", username);
+                $("#right").html("<p> A player guessed correctly! A new player is now drawing. Refresh to become a guesser.");
+            }
+        });
+
+        $("#text").append(button);
+        $("#text").append("<br><br>");
     });
-
-   
-
-
-
-    var onKeyDown = function(event) {
-        if (event.keyCode != 13) { // Enter
-            return;
-        }
-
-        
-        guess = guessBox.val();
-        $('#previousGuess').append('<p>' + guess + '</p>');
-        console.log(guess);
-        console.log(randomword)
-        if (guess === randomword) {
-            $('#previousGuess').append('<p> Correct! </p>');
-        } else {
-            console.log('nope')
-        }
-
-        guessBox.val('');
-        socket.emit('userGuess', guess);
-    };
-
-    var onGuess = function(guess) {
-        $('#previousGuess').text(guess);
-
-    }
-
-    var guessingUser = function(secondmessage) {
-
-    }
 
     var lostUser = function(disconnect) {
         $('#previousGuess').html('<p> a user has left!</p>');
     }
 
-    socket.on('userGuess', onGuess);
+    
     guessBox = $('#guess input');
-    guessBox.on('keydown', onKeyDown);
-    //socket.on('message', drawingUser);
-    socket.on('secondmessage', guessingUser);
-    socket.on('disconnect', lostUser);
 
     
+    socket.on('disconnect', lostUser);
+
+    socket.on("username", function(counter) {
+        username = "User_" + String(counter);
+        socket.emit("usernameBack", username);
+    });
+
 };
 
 
@@ -136,8 +162,4 @@ var pictionary = function() {
 
 $(document).ready(function() {
     pictionary();
-
-
-
-
 });
